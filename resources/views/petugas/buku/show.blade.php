@@ -85,7 +85,16 @@
                     <tr>
                         <td style="color: #64748b; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Lokasi Rak</td>
                         <td style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-weight: 600; color: #0f172a;">
-                            {{ $buku->lokasi_rak ?? 'Belum Ditentukan' }}
+                            @if ($buku->rak)
+                                <a href="{{ route('petugas.rak.show', $buku->rak->id) }}" style="color: #0f766e; text-decoration: none; font-weight: 700;">
+                                    [{{ $buku->rak->kode_rak }}] {{ $buku->rak->nama_rak }}
+                                </a>
+                                @if (!empty($buku->rak->lokasi_gedung))
+                                    <div style="font-size: 11.5px; color: #64748b; font-weight: 400; margin-top: 2px;">📍 {{ $buku->rak->lokasi_gedung }}</div>
+                                @endif
+                            @else
+                                {{ $buku->lokasi_rak ?? 'Belum Ditentukan' }}
+                            @endif
                         </td>
                     </tr>
                     <tr>

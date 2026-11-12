@@ -7,6 +7,7 @@ use App\Http\Controllers\Petugas\DashboardController as PetugasDashboardControll
 use App\Http\Controllers\Anggota\DashboardController as AnggotaDashboardController;
 use App\Http\Controllers\Petugas\AnggotaController;
 use App\Http\Controllers\Petugas\KategoriBukuController;
+use App\Http\Controllers\Petugas\RakBukuController;
 use App\Http\Controllers\Petugas\BukuController;
 use App\Http\Controllers\Petugas\PeminjamanController;
 use App\Http\Controllers\Petugas\PengembalianController;
@@ -39,6 +40,7 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
             ->name('dashboard');
 
         Route::resource('kategori', KategoriBukuController::class);
+        Route::resource('rak', RakBukuController::class);
         
         // Export & Import Massal Data Buku
         Route::get('/buku/export-csv', [BukuController::class, 'exportCsv'])
