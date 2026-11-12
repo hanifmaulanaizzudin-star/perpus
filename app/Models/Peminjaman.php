@@ -22,7 +22,12 @@ class Peminjaman extends Model
         'tanggal_pinjam',
         'tanggal_jatuh_tempo',
         'status',
+        'jumlah_perpanjangan',
         'catatan',
+    ];
+
+    protected $attributes = [
+        'jumlah_perpanjangan' => 0,
     ];
 
     protected function casts(): array
@@ -30,6 +35,7 @@ class Peminjaman extends Model
         return [
             'tanggal_pinjam' => 'date',
             'tanggal_jatuh_tempo' => 'date',
+            'jumlah_perpanjangan' => 'integer',
         ];
     }
 

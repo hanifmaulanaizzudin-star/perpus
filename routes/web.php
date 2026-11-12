@@ -10,6 +10,8 @@ use App\Http\Controllers\Petugas\KategoriBukuController;
 use App\Http\Controllers\Petugas\BukuController;
 use App\Http\Controllers\Petugas\PeminjamanController;
 use App\Http\Controllers\Petugas\PengembalianController;
+use App\Http\Controllers\Petugas\LaporanController;
+use App\Http\Controllers\Petugas\PengaturanController;
 
 // Rute Beranda: Mengarahkan otomatis sesuai status login
 Route::get('/', function () {
@@ -38,6 +40,13 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
 
         Route::resource('kategori', KategoriBukuController::class);
         
+        // Export & Import Massal Data Buku
+        Route::get('/buku/export-csv', [BukuController::class, 'exportCsv'])
+            ->name('buku.export-csv');
+        Route::get('/buku/download-template', [BukuController::class, 'downloadTemplateCsv'])
+            ->name('buku.download-template');
+        Route::post('/buku/import-csv', [BukuController::class, 'importCsv'])
+            ->name('buku.import-csv');
         Route::get('/buku/{buku}/cetak-barcode', [BukuController::class, 'cetakBarcode'])
             ->name('buku.cetak-barcode');
         Route::resource('buku', BukuController::class);
@@ -48,8 +57,34 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
             ->name('peminjaman.cari-anggota');
         Route::post('/peminjaman/blast-wa', [PeminjamanController::class, 'blastWaOtomatis'])
             ->name('peminjaman.blast-wa');
+        Route::post('/peminjaman/{peminjaman}/perpanjang', [PeminjamanController::class, 'perpanjang'])
+            ->name('peminjaman.perpanjang');
         Route::resource('peminjaman', PeminjamanController::class);
-        Route::resource('pengembalian', PengembalianController::class);
+        
+        // Transaksi Pengembalian: Dibatasi HANYA index, create, store, show.
+        // TIDAK ADA edit, update, atau destroy untuk menjamin Integritas Data & Anti-Manipulasi (Immutable Ledger)
+        Route::get('/pengembalian/cari-pinjaman', [PengembalianController::class, 'cariPinjaman'])
+            ->name('pengembalian.cari-pinjaman');
+        Route::resource('pengembalian', PengembalianController::class)->only(['index', 'create', 'store', 'show']);
+
+        // Modul Laporan & Rekapitulasi Perpustakaan
+        Route::get('/laporan', [LaporanController::class, 'index'])
+            ->name('laporan.index');
+        Route::get('/laporan/cetak', [LaporanController::class, 'cetak'])
+            ->name('laporan.cetak');
+        Route::get('/laporan/cetak-keuangan', [LaporanController::class, 'cetakKeuangan'])
+            ->name('laporan.cetak-keuangan');
+        Route::get('/laporan/cetak-sirkulasi', [LaporanController::class, 'cetakSirkulasi'])
+            ->name('laporan.cetak-sirkulasi');
+        Route::get('/laporan/export-keuangan', [LaporanController::class, 'exportKeuanganExcel'])
+            ->name('laporan.export-keuangan');
+
+        // Modul Pengaturan Perpustakaan
+        Route::get('/pengaturan', [PengaturanController::class, 'index'])
+            ->name('pengaturan.index');
+        Route::put('/pengaturan', [PengaturanController::class, 'update'])
+            ->name('pengaturan.update');
+
         Route::post('/logout', [PetugasAuthController::class, 'logout'])
             ->name('logout');
     });
@@ -99,6 +134,14 @@ Route::middleware(['auth:petugas', 'petugas.aktif'])
 
         Route::post('/anggota', [AnggotaController::class, 'store'])
             ->name('anggota.store');
+
+        // Export & Import Massal Data Anggota
+        Route::get('/anggota/export-csv', [AnggotaController::class, 'exportCsv'])
+            ->name('anggota.export-csv');
+        Route::get('/anggota/download-template', [AnggotaController::class, 'downloadTemplateCsv'])
+            ->name('anggota.download-template');
+        Route::post('/anggota/import-csv', [AnggotaController::class, 'importCsv'])
+            ->name('anggota.import-csv');
 
         Route::get('/anggota/{anggota}', [AnggotaController::class, 'show'])
             ->name('anggota.show');

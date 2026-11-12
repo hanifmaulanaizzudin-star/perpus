@@ -82,6 +82,9 @@
             </div>
             <div style="font-size: 13.5px; margin-bottom: 6px; color: {{ $peminjaman->status === 'terlambat' ? '#b91c1c' : '#0f172a' }};">
                 Jatuh Tempo: <strong>{{ \Carbon\Carbon::parse($peminjaman->tanggal_jatuh_tempo)->translatedFormat('d F Y') }}</strong>
+                @if (($peminjaman->jumlah_perpanjangan ?? 0) > 0)
+                    <span class="badge" style="background: #eef2ff; color: #4338ca; font-size: 11px; margin-left: 6px;">(Diperpanjang {{ $peminjaman->jumlah_perpanjangan }}x)</span>
+                @endif
             </div>
             <div style="font-size: 13.5px; margin-bottom: 6px; color: #475569;">
                 Petugas: <strong>{{ $peminjaman->petugas->nama_lengkap ?? '-' }}</strong>
@@ -157,11 +160,25 @@
     </div>
 
     {{-- Actions --}}
-    <div style="display: flex; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+    <div style="display: flex; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 20px; align-items: center; flex-wrap: wrap;">
         @if (in_array($peminjaman->status, ['dipinjam', 'terlambat']))
             <a href="{{ route('petugas.pengembalian.create', ['peminjaman_id' => $peminjaman->id]) }}" class="btn btn-primary">
                 Proses Pengembalian Buku
             </a>
+            @if ($peminjaman->status === 'dipinjam')
+                @if (($peminjaman->jumlah_perpanjangan ?? 0) < 1)
+                    <form action="{{ route('petugas.peminjaman.perpanjang', $peminjaman->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Apakah Anda yakin ingin memperpanjang masa peminjaman {{ $peminjaman->kode_peminjaman }} selama 7 hari?');">
+                        @csrf
+                        <button type="submit" class="btn" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; font-weight: 600;">
+                            🔄 Perpanjang Masa Pinjam (+7 Hari)
+                        </button>
+                    </form>
+                @else
+                    <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 12px; padding: 8px 12px; border: 1px solid #e2e8f0;">
+                        ℹ️ Sudah Diperpanjang 1 Kali (Maksimal)
+                    </span>
+                @endif
+            @endif
         @endif
         <a href="{{ route('petugas.peminjaman.index') }}" class="btn btn-secondary">
             &larr; Kembali ke Daftar

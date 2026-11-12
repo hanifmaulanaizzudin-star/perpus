@@ -112,6 +112,18 @@
                             <div style="display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap;">
                                 <a href="{{ route('petugas.peminjaman.show', $item->id) }}" class="act-detail" style="font-size: 11.5px; padding: 4px 8px;">Detail</a>
                                 @if (in_array($item->status, ['dipinjam', 'terlambat']))
+                                    @if ($item->status === 'dipinjam')
+                                        @if (($item->jumlah_perpanjangan ?? 0) < 1)
+                                            <form action="{{ route('petugas.peminjaman.perpanjang', $item->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Perpanjang masa peminjaman {{ $item->kode_peminjaman }} selama 7 hari?');">
+                                                @csrf
+                                                <button type="submit" class="btn" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; font-size: 11.5px; padding: 4px 8px;" title="Perpanjang Pinjaman (+7 hari)">
+                                                    🔄 Perpanjang
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10px; padding: 3px 6px;" title="Sudah pernah diperpanjang 1 kali">1x Perpanjang</span>
+                                        @endif
+                                    @endif
                                     <a href="{{ route('petugas.pengembalian.create', ['peminjaman_id' => $item->id]) }}" class="btn" style="background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; font-size: 11.5px; padding: 4px 8px;" title="Kembalikan Buku">
                                         Kembali
                                     </a>

@@ -7,6 +7,7 @@ use App\Models\Anggota;
 use App\Models\Buku;
 use App\Models\DetailPeminjaman;
 use App\Models\Peminjaman;
+use App\Models\PengaturanPerpustakaan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,9 +47,13 @@ class PeminjamanController extends Controller
             ->orderBy('judul')
             ->get();
 
-        // Default tanggal pinjam hari ini & tenggat kembali 7 hari ke depan
+        // Ambil konfigurasi perpustakaan
+        $pengaturan = PengaturanPerpustakaan::first();
+        $durasiPinjam = $pengaturan->lama_pinjam_hari ?? 7;
+
+        // Default tanggal pinjam hari ini & tenggat kembali sesuai pengaturan
         $tanggalPinjam = Carbon::today()->format('Y-m-d');
-        $tanggalJatuhTempo = Carbon::today()->addDays(7)->format('Y-m-d');
+        $tanggalJatuhTempo = Carbon::today()->addDays($durasiPinjam)->format('Y-m-d');
 
         return view('petugas.peminjaman.create', compact('anggota', 'buku', 'tanggalPinjam', 'tanggalJatuhTempo'));
     }
@@ -168,6 +173,13 @@ class PeminjamanController extends Controller
         // Cek duplikasi buku
         if (count($request->buku_id) !== count(array_unique($request->buku_id))) {
             return back()->withInput()->with('error', 'Buku yang sama tidak boleh dipinjam lebih dari 1 kali dalam 1 transaksi.');
+        }
+
+        // Cek kuota maksimal buku per peminjaman
+        $pengaturan = PengaturanPerpustakaan::first();
+        $maksimalBuku = $pengaturan->maksimal_buku_per_anggota ?? 3;
+        if (count($request->buku_id) > $maksimalBuku) {
+            return back()->withInput()->with('error', "Peminjaman ditolak: Melebihi batas kuota peminjaman ({$maksimalBuku} buku per anggota).");
         }
 
         // Validasi status keaktifan anggota & tanggungan buku
@@ -290,6 +302,58 @@ class PeminjamanController extends Controller
 
         $infoTambahan = ($tanpaHp > 0) ? " ({$tanpaHp} murid dilewati karena belum memasukkan nomor HP)" : "";
         return back()->with('success', "⚡ Pengiriman WA Otomatis Berhasil! Pesan tagihan telah dikirimkan ke {$terkirim} murid yang terlambat{$infoTambahan}.");
+    }
+
+    // 7. Perpanjang Masa Peminjaman Buku (Loan Renewal)
+    public function perpanjang(Peminjaman $peminjaman)
+    {
+        // 1. Validasi Status Pinjaman
+        if ($peminjaman->status === 'dikembalikan') {
+            return back()->with('error', 'Transaksi peminjaman ini sudah selesai dikembalikan.');
+        }
+
+        if ($peminjaman->status === 'terlambat' || Carbon::today()->startOfDay()->greaterThan(Carbon::parse($peminjaman->tanggal_jatuh_tempo)->startOfDay())) {
+            return back()->with('error', 'Peminjaman sudah melewati jatuh tempo (terlambat) dan terkena denda. Harap selesaikan pengembalian di meja sirkulasi.');
+        }
+
+        // 2. Batas Maksimal Perpanjangan (Maksimal 1 kali)
+        if (($peminjaman->jumlah_perpanjangan ?? 0) >= 1) {
+            return back()->with('error', "Peminjaman {$peminjaman->kode_peminjaman} sudah mencapai batas maksimal perpanjangan (1 kali).");
+        }
+
+        // 3. Hitung Tanggal Jatuh Tempo Baru
+        $pengaturan = PengaturanPerpustakaan::first();
+        $durasiHari = $pengaturan->lama_peminjaman_hari ?? 7;
+        $tenggatLama = Carbon::parse($peminjaman->tanggal_jatuh_tempo)->translatedFormat('d M Y');
+        $tenggatBaru = Carbon::parse($peminjaman->tanggal_jatuh_tempo)->addDays($durasiHari);
+
+        // 4. Update Database
+        $petugasNama = auth('petugas')->user()->nama_lengkap ?? 'Petugas';
+        $logPerpanjangan = "[Perpanjangan Ke-1: Ditambah {$durasiHari} hari dari {$tenggatLama} menjadi {$tenggatBaru->format('d/m/Y')} oleh {$petugasNama} pada " . now()->format('d/m/Y H:i') . "]";
+        $catatanBaru = !empty($peminjaman->catatan) ? ($peminjaman->catatan . "\n" . $logPerpanjangan) : $logPerpanjangan;
+
+        $peminjaman->update([
+            'tanggal_jatuh_tempo' => $tenggatBaru->format('Y-m-d'),
+            'jumlah_perpanjangan' => ($peminjaman->jumlah_perpanjangan ?? 0) + 1,
+            'catatan'             => $catatanBaru,
+        ]);
+
+        // 5. Notifikasi WhatsApp Konfirmasi Perpanjangan (Opsional/Otomatis)
+        $anggota = $peminjaman->anggota;
+        if ($anggota && !empty($anggota->no_telepon)) {
+            $bukuList = $peminjaman->detailPeminjaman->map(fn($d) => $d->buku->judul ?? 'Buku')->implode(', ');
+            $pesanWa = "Halo {$anggota->nama_lengkap},\n\n"
+                     . "✅ *Pemberitahuan Perpanjangan Pinjaman Buku*\n"
+                     . "Kode Pinjam: *{$peminjaman->kode_peminjaman}*\n"
+                     . "Buku: *{$bukuList}*\n"
+                     . "📅 *Tenggat Waktu Baru: {$tenggatBaru->translatedFormat('d F Y')}*\n\n"
+                     . "Masa peminjaman buku kamu telah berhasil diperpanjang (+{$durasiHari} hari). Selamat membaca kembali! 📖\n\n"
+                     . "_Perpustakaan PerpusKu_";
+
+            \App\Services\WhatsAppService::kirimPesan($anggota->no_telepon, $pesanWa);
+        }
+
+        return back()->with('success', "Perpanjangan berhasil! Peminjaman {$peminjaman->kode_peminjaman} diperpanjang {$durasiHari} hari hingga {$tenggatBaru->translatedFormat('d F Y')}.");
     }
 }
 

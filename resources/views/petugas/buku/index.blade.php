@@ -16,14 +16,20 @@
             <div class="alert alert-danger">{{ session('error') }}</div>
         @endif
 
-        <div class="toolbar" style="margin-bottom: 0;">
-            <div>
+        <div class="toolbar" style="margin-bottom: 0; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <a href="{{ route('petugas.buku.create') }}" class="btn btn-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <line x1="12" y1="5" x2="12" y2="19"/>
                         <line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
                     Tambah Koleksi Buku
+                </a>
+                <button type="button" onclick="document.getElementById('modal-import-buku').style.display='flex'" class="btn" style="background: #0f766e; color: #fff; font-weight: 600;">
+                    📥 Import Buku (CSV)
+                </button>
+                <a href="{{ route('petugas.buku.export-csv') }}" class="btn btn-secondary" style="font-weight: 600;" title="Export Seluruh Katalog Buku">
+                    📊 Export CSV
                 </a>
             </div>
 
@@ -39,6 +45,38 @@
                     <a href="{{ route('petugas.buku.index') }}" class="btn btn-secondary">Reset</a>
                 @endif
             </form>
+        </div>
+
+        {{-- Modal Import Buku --}}
+        <div id="modal-import-buku" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+            <div style="background: #ffffff; width: 100%; max-width: 520px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); overflow: hidden;">
+                <div style="padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">📥 Import Katalog Buku Massal</h3>
+                    <button type="button" onclick="document.getElementById('modal-import-buku').style.display='none'" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">&times;</button>
+                </div>
+                
+                <form action="{{ route('petugas.buku.import-csv') }}" method="POST" enctype="multipart/form-data" style="padding: 24px;">
+                    @csrf
+                    <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 18px; font-size: 13px; color: #475569;">
+                        <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">Panduan Format File CSV Buku:</div>
+                        <p style="margin: 0 0 10px; font-size: 12.5px;">Jika nama kategori belum ada di sistem, sistem otomatis membuatkannya untuk Anda.</p>
+                        <a href="{{ route('petugas.buku.download-template') }}" class="btn" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; font-size: 12px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;">
+                            📄 Unduh Template CSV Buku
+                        </a>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Pilih File CSV Buku:</label>
+                        <input type="file" name="file_csv" accept=".csv,text/csv,text/plain" class="form-control" required style="padding: 8px;">
+                        <small style="color: #64748b; display: block; margin-top: 4px;">Format file: .csv (Maksimal 5MB)</small>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <button type="button" onclick="document.getElementById('modal-import-buku').style.display='none'" class="btn btn-secondary">Batal</button>
+                        <button type="submit" class="btn btn-primary" style="background: #0f766e; border: none;">Mulai Proses Import</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 

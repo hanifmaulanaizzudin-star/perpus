@@ -14,25 +14,59 @@
         <div class="alert alert-danger">{{ session('error') }}</div>
     @endif
 
-    {{-- 1. PEMILIHAN TRANSAKSI PINJAMAN --}}
+    {{-- 1. PEMILIHAN TRANSAKSI PINJAMAN & SCANNER BARCODE --}}
     <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px; margin-bottom: 24px;">
-        <label for="select_peminjaman" style="font-weight: 700; font-size: 13.5px; color: #0f172a; display: block; margin-bottom: 8px;">
-            Pilih Transaksi Peminjaman:
-        </label>
-        
-        <select 
-            id="select_peminjaman" 
-            class="form-control" 
-            style="font-size: 13.5px; background: white;"
-            onchange="if(this.value) window.location.href = '{{ route('petugas.pengembalian.create') }}?peminjaman_id=' + this.value"
-        >
-            <option value="">-- Cari Kode Peminjaman / Nama Anggota ({{ $peminjamanAktif->count() }} Transaksi Aktif) --</option>
-            @foreach ($peminjamanAktif as $p)
-                <option value="{{ $p->id }}" {{ (isset($selectedPeminjaman) && $selectedPeminjaman->id == $p->id) ? 'selected' : '' }}>
-                    {{ $p->kode_peminjaman }} &bull; {{ $p->anggota->nama_lengkap ?? 'Anggota' }} (Tenggat: {{ \Carbon\Carbon::parse($p->tanggal_jatuh_tempo)->translatedFormat('d M Y') }})
-                </option>
-            @endforeach
-        </select>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <label style="font-weight: 700; font-size: 13.5px; color: #0f172a; margin: 0;">
+                Scan Barcode Buku / Kartu Siswa / Struk Pinjam:
+            </label>
+            <button type="button" id="btn-toggle-camera-kembali" class="btn btn-secondary" style="font-size: 12.5px; padding: 6px 14px;">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 4px; vertical-align: -2px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Buka Kamera Scanner
+            </button>
+        </div>
+
+        {{-- Barcode input row --}}
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <input 
+                type="text" 
+                id="barcode-kembali-input" 
+                class="form-control" 
+                placeholder="Scan kartu siswa / fisik buku yang dikembalikan / kode pinjam..."
+                style="font-size: 13.5px; height: 42px;"
+                autocomplete="off"
+            >
+            <button type="button" id="btn-cari-pinjaman-scan" class="btn btn-primary" style="white-space: nowrap; padding: 0 20px;">
+                Cari Transaksi
+            </button>
+        </div>
+
+        <div id="scan-kembali-message" style="margin-bottom: 12px; font-size: 13px; display: none; font-weight: 600;"></div>
+
+        {{-- Camera Viewfinder --}}
+        <div id="camera-kembali-wrapper" style="display: none; margin-bottom: 16px; text-align: center;">
+            <div id="reader-kembali" style="width: 100%; max-width: 500px; margin: 0 auto; border-radius: 8px; overflow: hidden; border: 1px solid #cbd5e1; background: #000;"></div>
+            <small style="color: #64748b; display: block; margin-top: 8px;">Arahkan kamera ke barcode buku atau kartu anggota.</small>
+        </div>
+
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 14px;">
+            <label for="select_peminjaman" style="font-size: 12.5px; color: #64748b; display: block; margin-bottom: 6px;">
+                Atau pilih manual dari daftar pinjaman aktif:
+            </label>
+            <select 
+                id="select_peminjaman" 
+                class="form-control" 
+                style="font-size: 13px; background: white;"
+                onchange="if(this.value) window.location.href = '{{ route('petugas.pengembalian.create') }}?peminjaman_id=' + this.value"
+            >
+                <option value="">-- Pilih Transaksi Pinjaman Aktif ({{ $peminjamanAktif->count() }} Transaksi) --</option>
+                @foreach ($peminjamanAktif as $p)
+                    <option value="{{ $p->id }}" {{ (isset($selectedPeminjaman) && $selectedPeminjaman->id == $p->id) ? 'selected' : '' }}>
+                        {{ $p->kode_peminjaman }} &bull; {{ $p->anggota->nama_lengkap ?? 'Anggota' }} (Tenggat: {{ \Carbon\Carbon::parse($p->tanggal_jatuh_tempo)->translatedFormat('d M Y') }})
+                    </option>
+                @endforeach
+            </select>
+        </div>
     </div>
 
     @if ($selectedPeminjaman)
@@ -309,6 +343,113 @@
             submitBtn.innerText = 'Simpan Pengembalian Buku';
             submitBtn.style.background = 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)';
         }
+    }
+</script>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+    const barcodeKembaliInput = document.getElementById('barcode-kembali-input');
+    const btnCariPinjamanScan = document.getElementById('btn-cari-pinjaman-scan');
+    const scanKembaliMsg = document.getElementById('scan-kembali-message');
+    const btnToggleCameraKembali = document.getElementById('btn-toggle-camera-kembali');
+    const cameraKembaliWrapper = document.getElementById('camera-kembali-wrapper');
+
+    let html5QrKembali = null;
+    let isKembaliCameraRunning = false;
+
+    if (barcodeKembaliInput) {
+        barcodeKembaliInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                cariPinjamanViaScan(this.value.trim());
+            }
+        });
+    }
+
+    if (btnCariPinjamanScan) {
+        btnCariPinjamanScan.addEventListener('click', function() {
+            cariPinjamanViaScan(barcodeKembaliInput.value.trim());
+        });
+    }
+
+    function cariPinjamanViaScan(kode) {
+        if (!kode) {
+            tampilkanPesanKembali('Silakan scan barcode atau masukkan kode.', 'danger');
+            return;
+        }
+
+        tampilkanPesanKembali('Mencari data pinjaman aktif...', 'info');
+
+        fetch(`{{ route('petugas.pengembalian.cari-pinjaman') }}?kode=${encodeURIComponent(kode)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.peminjaman_id) {
+                    tampilkanPesanKembali(`Ditemukan! Mengalihkan ke transaksi ${data.kode_peminjaman} (${data.nama_anggota})...`, 'success');
+                    window.location.href = `{{ route('petugas.pengembalian.create') }}?peminjaman_id=${data.peminjaman_id}`;
+                } else {
+                    tampilkanPesanKembali(data.message || 'Peminjaman tidak ditemukan.', 'danger');
+                }
+            })
+            .catch(() => {
+                tampilkanPesanKembali('Gagal menghubungi server untuk pencarian barcode.', 'danger');
+            });
+    }
+
+    function tampilkanPesanKembali(pesan, tipe) {
+        if (!scanKembaliMsg) return;
+        scanKembaliMsg.style.display = 'block';
+        scanKembaliMsg.textContent = pesan;
+        if (tipe === 'success') {
+            scanKembaliMsg.style.color = '#059669';
+        } else if (tipe === 'danger') {
+            scanKembaliMsg.style.color = '#dc2626';
+        } else {
+            scanKembaliMsg.style.color = '#2563eb';
+        }
+    }
+
+    if (btnToggleCameraKembali) {
+        btnToggleCameraKembali.addEventListener('click', function() {
+            if (!isKembaliCameraRunning) {
+                cameraKembaliWrapper.style.display = 'block';
+                this.innerHTML = '<span style="color: #991b1b;">✕ Tutup Kamera</span>';
+                this.style.background = '#fef2f2';
+                this.style.borderColor = '#fecaca';
+
+                html5QrKembali = new Html5Qrcode("reader-kembali");
+                html5QrKembali.start(
+                    { facingMode: "environment" },
+                    { 
+                        fps: 15, 
+                        qrbox: function(w, h) {
+                            return { width: Math.floor(w * 0.85), height: Math.floor(h * 0.65) };
+                        }
+                    },
+                    (decodedText) => {
+                        barcodeKembaliInput.value = decodedText;
+                        cariPinjamanViaScan(decodedText);
+                        try { html5QrKembali.pause(); } catch(e){}
+                    },
+                    () => {}
+                ).catch(err => {
+                    tampilkanPesanKembali('Gagal mengakses kamera: ' + err, 'danger');
+                });
+
+                isKembaliCameraRunning = true;
+            } else {
+                if (html5QrKembali) {
+                    html5QrKembali.stop().then(() => {
+                        cameraKembaliWrapper.style.display = 'none';
+                        html5QrKembali = null;
+                    });
+                }
+                this.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 4px; vertical-align: -2px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg> Buka Kamera Scanner';
+                this.style.background = '#ffffff';
+                this.style.color = '#334155';
+                this.style.borderColor = '#cbd5e1';
+                isKembaliCameraRunning = false;
+            }
+        });
     }
 </script>
 @endsection

@@ -39,6 +39,42 @@ class PengembalianController extends Controller
         return view('petugas.pengembalian.index', compact('pengembalian'));
     }
 
+    // 1.1 API Cari Pinjaman via Barcode/QR (Struk PJ / Nomor Induk Siswa / Barcode Buku)
+    public function cariPinjaman(Request $request)
+    {
+        $query = trim($request->get('kode', ''));
+        if (empty($query)) {
+            return response()->json(['success' => false, 'message' => 'Kode scan kosong.']);
+        }
+
+        $peminjaman = Peminjaman::with(['anggota', 'detailPeminjaman.buku'])
+            ->whereIn('status', ['dipinjam', 'terlambat'])
+            ->where(function ($q) use ($query) {
+                $q->where('kode_peminjaman', $query)
+                  ->orWhereHas('anggota', function ($qa) use ($query) {
+                      $qa->where('nomor_induk', $query);
+                  })
+                  ->orWhereHas('detailPeminjaman.buku', function ($qb) use ($query) {
+                      $qb->where('kode_buku', $query);
+                  });
+            })
+            ->first();
+
+        if ($peminjaman) {
+            return response()->json([
+                'success'         => true,
+                'peminjaman_id'   => $peminjaman->id,
+                'kode_peminjaman' => $peminjaman->kode_peminjaman,
+                'nama_anggota'    => $peminjaman->anggota->nama_lengkap ?? 'Anggota',
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => "Tidak ada peminjaman aktif yang cocok dengan barcode '{$query}'.",
+        ]);
+    }
+
     // 2. Form Proses Pengembalian Buku
     public function create(Request $request)
     {
