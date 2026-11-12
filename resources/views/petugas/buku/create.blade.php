@@ -83,16 +83,21 @@
             </div>
 
             <div class="form-group">
-                <label for="lokasi_rak">Lokasi Rak</label>
-                <input 
-                    type="text" 
-                    id="lokasi_rak" 
-                    name="lokasi_rak" 
-                    class="form-control" 
-                    placeholder="Contoh: Rak A-02, Tingkat 3" 
-                    value="{{ old('lokasi_rak') }}"
-                >
-                @error('lokasi_rak')
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="rak_id" style="margin: 0; font-weight: 600;">Lokasi Rak Buku</label>
+                    <a href="{{ route('petugas.rak.create') }}" target="_blank" style="font-size: 11.5px; color: #4338ca; text-decoration: none; font-weight: 700;">
+                        + Buat Rak Baru
+                    </a>
+                </div>
+                <select id="rak_id" name="rak_id" class="form-control">
+                    <option value="">-- Pilih Rak Penyimpanan Buku --</option>
+                    @foreach ($rak as $r)
+                        <option value="{{ $r->id }}" {{ old('rak_id') == $r->id ? 'selected' : '' }}>
+                            {{ $r->label_rak }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('rak_id')
                     <span class="text-danger">{{ $message }}</span>
                 @enderror
             </div>

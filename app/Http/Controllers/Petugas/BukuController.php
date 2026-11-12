@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Petugas;
 use App\Http\Controllers\Controller;
 use App\Models\Buku;
 use App\Models\KategoriBuku;
+use App\Models\RakBuku;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class BukuController extends Controller
@@ -13,13 +15,17 @@ class BukuController extends Controller
     // 1. Tampilkan Daftar Buku (+ Pencarian)
     public function index(Request $request)
     {
-        $buku = Buku::with('kategori')
+        $buku = Buku::with(['kategori', 'rak'])
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('judul', 'like', "%{$search}%")
                       ->orWhere('kode_buku', 'like', "%{$search}%")
                       ->orWhere('penulis', 'like', "%{$search}%")
-                      ->orWhere('isbn', 'like', "%{$search}%");
+                      ->orWhere('isbn', 'like', "%{$search}%")
+                      ->orWhereHas('rak', function ($qr) use ($search) {
+                          $qr->where('nama_rak', 'like', "%{$search}%")
+                             ->orWhere('kode_rak', 'like', "%{$search}%");
+                      });
                 });
             })
             ->latest('id')
@@ -32,10 +38,10 @@ class BukuController extends Controller
     // 2. Form Tambah Buku
     public function create()
     {
-        // Ambil kategori yang aktif untuk dropdown
         $kategori = KategoriBuku::where('status', 'aktif')->orderBy('nama_kategori')->get();
+        $rak = RakBuku::where('status', 'aktif')->orderBy('kode_rak')->get();
 
-        return view('petugas.buku.create', compact('kategori'));
+        return view('petugas.buku.create', compact('kategori', 'rak'));
     }
 
     // 3. Simpan Buku Baru
@@ -46,14 +52,29 @@ class BukuController extends Controller
             'isbn'         => 'nullable|string|max:30|unique:buku,isbn',
             'judul'        => 'required|string|max:200',
             'kategori_id'  => 'required|exists:kategori_buku,id',
+            'rak_id'       => 'nullable|exists:rak_buku,id',
             'penulis'      => 'nullable|string|max:150',
             'penerbit'     => 'nullable|string|max:150',
             'tahun_terbit' => 'nullable|integer|digits:4',
-            'lokasi_rak'   => 'nullable|string|max:50',
+            'lokasi_rak'   => 'nullable|string|max:100',
             'jumlah_stok'  => 'required|integer|min:0',
             'deskripsi'    => 'nullable|string',
             'status'       => 'required|in:tersedia,nonaktif',
+            'gambar_sampul'=> 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
+
+        // Jika rak_id dipilih, otomatis isi teks lokasi_rak dari nama rak
+        if (!empty($validated['rak_id'])) {
+            $rakTerpilih = RakBuku::find($validated['rak_id']);
+            if ($rakTerpilih) {
+                $validated['lokasi_rak'] = $rakTerpilih->label_rak;
+            }
+        }
+
+        // Upload gambar jika ada
+        if ($request->hasFile('gambar_sampul')) {
+            $validated['gambar_sampul'] = $request->file('gambar_sampul')->store('sampul_buku', 'public');
+        }
 
         // Logika perpus: Saat buku baru dibuat, stok_tersedia = jumlah_stok
         $validated['stok_tersedia'] = $validated['jumlah_stok'];
@@ -68,14 +89,14 @@ class BukuController extends Controller
     // Cetak Stiker Barcode Buku
     public function cetakBarcode(Buku $buku)
     {
-        $buku->load('kategori');
+        $buku->load(['kategori', 'rak']);
         return view('petugas.buku.cetak_barcode', compact('buku'));
     }
 
     // 4. Detail Buku
     public function show(Buku $buku)
     {
-        $buku->load('kategori');
+        $buku->load(['kategori', 'rak']);
         return view('petugas.buku.show', compact('buku'));
     }
 
@@ -83,34 +104,37 @@ class BukuController extends Controller
     public function edit(Buku $buku)
     {
         $kategori = KategoriBuku::where('status', 'aktif')->orderBy('nama_kategori')->get();
-        return view('petugas.buku.edit', compact('buku', 'kategori'));
+        $rak = RakBuku::where('status', 'aktif')->orderBy('kode_rak')->get();
+
+        return view('petugas.buku.edit', compact('buku', 'kategori', 'rak'));
     }
 
     // 6. Update Buku
     public function update(Request $request, Buku $buku)
     {
         $validated = $request->validate([
-            'kode_buku' => [
-                'required', 'string', 'max:50',
-                Rule::unique('buku', 'kode_buku')->ignore($buku->id),
-            ],
-            'isbn' => [
-                'nullable', 'string', 'max:30',
-                Rule::unique('buku', 'isbn')->ignore($buku->id),
-            ],
-            'judul'         => 'required|string|max:200',
-            'kategori_id'   => 'required|exists:kategori_buku,id',
-            'penulis'       => 'nullable|string|max:150',
-            'penerbit'      => 'nullable|string|max:150',
-            'tahun_terbit'  => 'nullable|integer|digits:4',
-            'lokasi_rak'    => 'nullable|string|max:50',
-            'jumlah_stok'   => 'required|integer|min:0',
-            'deskripsi'     => 'nullable|string',
-            'status'        => 'required|in:tersedia,nonaktif',
-            'gambar_sampul' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'kode_buku'    => ['required', 'string', 'max:50', Rule::unique('buku', 'kode_buku')->ignore($buku->id)],
+            'isbn'         => ['nullable', 'string', 'max:30', Rule::unique('buku', 'isbn')->ignore($buku->id)],
+            'judul'        => 'required|string|max:200',
+            'kategori_id'  => 'required|exists:kategori_buku,id',
+            'rak_id'       => 'nullable|exists:rak_buku,id',
+            'penulis'      => 'nullable|string|max:150',
+            'penerbit'     => 'nullable|string|max:150',
+            'tahun_terbit' => 'nullable|integer|digits:4',
+            'lokasi_rak'   => 'nullable|string|max:100',
+            'jumlah_stok'  => 'required|integer|min:0',
+            'deskripsi'    => 'nullable|string',
+            'status'       => 'required|in:tersedia,nonaktif',
+            'gambar_sampul'=> 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
-        // Jika upload cover baru, hapus cover lama dari storage
+        if (!empty($validated['rak_id'])) {
+            $rakTerpilih = RakBuku::find($validated['rak_id']);
+            if ($rakTerpilih) {
+                $validated['lokasi_rak'] = $rakTerpilih->label_rak;
+            }
+        }
+
         if ($request->hasFile('gambar_sampul')) {
             if ($buku->gambar_sampul && Storage::disk('public')->exists($buku->gambar_sampul)) {
                 Storage::disk('public')->delete($buku->gambar_sampul);

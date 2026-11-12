@@ -124,6 +124,9 @@
                             <div style="font-size: 12px; color: #64748b;">
                                 {{ $item->penulis ?? 'Tanpa Penulis' }} &bull; {{ $item->tahun_terbit ?? '-' }}
                             </div>
+                            <div style="font-size: 11.5px; color: #0f766e; font-weight: 600; margin-top: 2px;">
+                                📍 {{ $item->nama_lokasi_rak }}
+                            </div>
                         </td>
 
                         <td>

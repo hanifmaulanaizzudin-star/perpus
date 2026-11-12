@@ -78,7 +78,7 @@
                         <td style="color: #64748b; padding: 11px 0; border-bottom: 1px solid #f1f5f9;">Lokasi Rak</td>
                         <td style="padding: 11px 0; border-bottom: 1px solid #f1f5f9;">
                             <span style="background: #f0fdf4; color: #166534; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1px solid #bbf7d0;">
-                                {{ $buku->lokasi_rak ?? 'Tanyakan kepada Petugas' }}
+                                {{ $buku->nama_lokasi_rak }}
                             </span>
                         </td>
                     </tr>

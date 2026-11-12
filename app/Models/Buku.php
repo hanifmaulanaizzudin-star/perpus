@@ -17,6 +17,7 @@ class Buku extends Model
 
     protected $fillable = [
         'kategori_id',
+        'rak_id',
         'kode_buku',
         'isbn',
         'judul',
@@ -34,6 +35,19 @@ class Buku extends Model
     public function kategori(): BelongsTo
     {
         return $this->belongsTo(KategoriBuku::class, 'kategori_id');
+    }
+
+    public function rak(): BelongsTo
+    {
+        return $this->belongsTo(RakBuku::class, 'rak_id');
+    }
+
+    public function getNamaLokasiRakAttribute(): string
+    {
+        if ($this->rak) {
+            return "[{$this->rak->kode_rak}] {$this->rak->nama_rak}";
+        }
+        return $this->lokasi_rak ?? '-';
     }
 
     public function detailPeminjaman(): HasMany
