@@ -9,6 +9,8 @@ use App\Models\DetailPengembalian;
 use App\Models\Peminjaman;
 use App\Models\PengaturanPerpustakaan;
 use App\Models\Pengembalian;
+use App\Models\ReservasiBuku;
+use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -223,6 +225,7 @@ class PengembalianController extends Controller
             ]);
 
             // 5. Simpan Detail Pengembalian & Kembalikan Stok Buku
+            $reservasiNotifs = [];
             foreach ($peminjaman->detailPeminjaman as $detail) {
                 $kondisi = $request->kondisi_buku[$detail->id] ?? 'baik';
                 $biaya = isset($request->biaya_ganti_rugi[$detail->id]) ? (float) $request->biaya_ganti_rugi[$detail->id] : 0;
@@ -251,9 +254,50 @@ class PengembalianController extends Controller
                 // Update jumlah dikembalikan di detail peminjaman
                 $detail->update(['jumlah_dikembalikan' => $detail->jumlah_pinjam]);
 
-                // Jika buku kondisi baik / rusak ringan, kembalikan stok buku ke rak
+                // Jika buku kondisi baik / rusak ringan, prioritaskan untuk antrean reservasi atau kembalikan stok buku ke rak
                 if (in_array($kondisi, ['baik', 'rusak_ringan'])) {
-                    Buku::where('id', $detail->buku_id)->increment('stok_tersedia', $detail->jumlah_pinjam);
+                    $bukuTerkait = Buku::find($detail->buku_id);
+                    $sisaQty = $detail->jumlah_pinjam;
+
+                    for ($i = 0; $i < $detail->jumlah_pinjam; $i++) {
+                        $antreanReservasi = ReservasiBuku::with('anggota')
+                            ->where('buku_id', $detail->buku_id)
+                            ->where('status', 'menunggu')
+                            ->orderBy('id', 'asc')
+                            ->first();
+
+                        if ($antreanReservasi) {
+                            $batasAmbil = now()->addDays(2)->endOfDay();
+                            $antreanReservasi->update([
+                                'status'           => 'tersedia',
+                                'tanggal_tersedia' => now(),
+                                'batas_ambil'      => $batasAmbil,
+                                'catatan'          => ($antreanReservasi->catatan ? $antreanReservasi->catatan . "\n" : '') . "[Buku kembali & disisihkan di sirkulasi pada " . now()->format('d/m/Y H:i') . "]",
+                            ]);
+
+                            $namaPeminjam = $antreanReservasi->anggota->nama_lengkap ?? 'Siswa';
+                            $reservasiNotifs[] = "Buku '{$bukuTerkait->judul}' disisihkan untuk reservasi {$namaPeminjam} ({$antreanReservasi->kode_reservasi}) hingga " . $batasAmbil->translatedFormat('d F Y') . ".";
+
+                            // Kirim Notifikasi WhatsApp Otomatis ke Siswa yang Reservasi
+                            if ($antreanReservasi->anggota && !empty($antreanReservasi->anggota->no_telepon)) {
+                                $pesanWa = "Halo {$namaPeminjam},\n\n"
+                                         . "🎉 *Kabar Gembira: Buku Antrean Kamu Sudah Tersedia!*\n"
+                                         . "Kode Reservasi: *{$antreanReservasi->kode_reservasi}*\n"
+                                         . "Judul Buku: *{$bukuTerkait->judul}*\n"
+                                         . "📅 *Batas Pengambilan: {$batasAmbil->translatedFormat('l, d F Y')}*\n\n"
+                                         . "Buku yang kamu antrekan telah dikembalikan dan kini disimpan di Meja Sirkulasi khusus untuk kamu. Silakan segera temui petugas dan tunjukkan kode reservasi ini ya!\n\n"
+                                         . "_Perpustakaan PerpusKu_";
+                                WhatsAppService::kirimPesan($antreanReservasi->anggota->no_telepon, $pesanWa);
+                            }
+
+                            $sisaQty--;
+                        }
+                    }
+
+                    // Sisa eksemplar yang tidak ada yang antre dikembalikan ke stok rak umum
+                    if ($sisaQty > 0) {
+                        Buku::where('id', $detail->buku_id)->increment('stok_tersedia', $sisaQty);
+                    }
                 }
             }
 
@@ -269,6 +313,10 @@ class PengembalianController extends Controller
                 $flashMsg = "Penyelesaian buku rusak berhasil diproses! Transaksi {$kodePengembalian} tercatat di sistem.";
             } else {
                 $flashMsg = "Semua buku berhasil dikembalikan dalam kondisi baik! Transaksi pengembalian {$kodePengembalian} tercatat.";
+            }
+
+            if (!empty($reservasiNotifs)) {
+                $flashMsg .= " 🔔 Antrean Reservasi: " . implode(' ', $reservasiNotifs);
             }
 
             return redirect()

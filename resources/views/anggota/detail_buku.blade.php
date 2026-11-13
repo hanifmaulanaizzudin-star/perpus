@@ -5,6 +5,14 @@
 @section('content')
 <div class="card-box" style="max-width: 950px; margin: 0 auto;">
 
+    {{-- Alerts --}}
+    @if (session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-danger">{{ session('error') }}</div>
+    @endif
+
     {{-- Breadcrumb Navigation --}}
     <div style="margin-bottom: 24px; font-size: 13px; color: #64748b; display: flex; align-items: center; gap: 8px;">
         <a href="{{ route('anggota.katalog') }}" style="color: #4f46e5; text-decoration: none; font-weight: 600;">Katalog</a>
@@ -38,9 +46,57 @@
                         Tersedia {{ $buku->stok_tersedia }} di Rak Perpustakaan
                     </div>
                 @else
-                    <div class="badge badge-danger" style="font-size: 13.5px; padding: 8px 18px; width: 100%; justify-content: center;">
-                        Stok Sedang Kosong (Dipinjam)
+                    <div class="badge badge-danger" style="font-size: 13px; padding: 6px 14px; width: 100%; justify-content: center; margin-bottom: 12px;">
+                        Stok Fisik Sedang Dipinjam Semua
                     </div>
+
+                    @if ($reservasiAktif)
+                        @if ($reservasiAktif->status === 'tersedia')
+                            <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 12px; text-align: left; margin-bottom: 12px;">
+                                <div style="font-weight: 800; color: #065f46; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                                    <span>🎉</span> BUKU SIAP DIAMBIL!
+                                </div>
+                                <p style="font-size: 12px; color: #047857; margin: 4px 0 6px;">
+                                    Buku ini sudah disisihkan untuk Anda di meja sirkulasi perpustakaan.
+                                </p>
+                                <div style="font-size: 11px; color: #065f46; font-weight: 700;">
+                                    Tenggat Ambil: {{ $reservasiAktif->batas_ambil ? $reservasiAktif->batas_ambil->translatedFormat('d M Y, H:i') : '-' }} WIB
+                                </div>
+                            </div>
+                        @else
+                            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 12px; text-align: left; margin-bottom: 12px;">
+                                <div style="font-weight: 800; color: #92400e; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                                    <span>🔖</span> STATUS: DALAM ANTREAN
+                                </div>
+                                <div style="font-size: 12.5px; color: #b45309; margin: 4px 0;">
+                                    Posisi Antrean Anda: <strong>#{{ $reservasiAktif->posisi_antrean }}</strong>
+                                </div>
+                                <div style="font-size: 11px; color: #78350f;">
+                                    Kode: <code>{{ $reservasiAktif->kode_reservasi }}</code>
+                                </div>
+                                
+                                <form action="{{ route('anggota.reservasi.batal', $reservasiAktif->id) }}" method="POST" style="margin-top: 10px;" onsubmit="return confirm('Yakin ingin membatalkan antrean reservasi ini?');">
+                                    @csrf
+                                    <button type="submit" class="btn" style="background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; font-size: 11.5px; width: 100%; padding: 5px; font-weight: 600;">
+                                        Batalkan Antrean
+                                    </button>
+                                </form>
+                            </div>
+                        @endif
+                    @else
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 12px; text-align: center;">
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">
+                                Terdapat <strong>{{ $totalAntreanBuku }} siswa</strong> sedang mengantre buku ini.
+                            </div>
+                            <form action="{{ route('anggota.reservasi.store', $buku->id) }}" method="POST" onsubmit="return confirm('Ajukan reservasi online untuk buku {{ $buku->judul }}? Anda akan diberitahu saat buku ini dikembalikan.');">
+                                @csrf
+                                <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 13px; padding: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
+                                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+                                    Booking / Antre Buku Ini
+                                </button>
+                            </form>
+                        </div>
+                    @endif
                 @endif
             </div>
         </div>

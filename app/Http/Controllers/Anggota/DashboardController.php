@@ -7,6 +7,8 @@ use App\Models\Buku;
 use App\Models\DetailPeminjaman;
 use App\Models\KategoriBuku;
 use App\Models\Peminjaman;
+use App\Models\ReservasiBuku;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -32,6 +34,11 @@ class DashboardController extends Controller
             ->where('status', 'dikembalikan')
             ->count();
 
+        // Hitung reservasi aktif (menunggu / siap diambil)
+        $reservasiAktif = ReservasiBuku::where('anggota_id', $anggotaId)
+            ->whereIn('status', ['menunggu', 'tersedia'])
+            ->count();
+
         // Ambil daftar transaksi peminjaman yang sedang aktif
         $pinjamanBerjalan = Peminjaman::with(['detailPeminjaman.buku.kategori'])
             ->where('anggota_id', $anggotaId)
@@ -50,6 +57,7 @@ class DashboardController extends Controller
             'pinjamanAktif',
             'totalBukuDibawa',
             'pinjamanSelesai',
+            'reservasiAktif',
             'pinjamanBerjalan',
             'bukuTerbaru'
         ));
@@ -62,7 +70,7 @@ class DashboardController extends Controller
             ->orderBy('nama_kategori')
             ->get();
 
-        $buku = Buku::with('kategori')
+        $buku = Buku::with(['kategori', 'rak'])
             ->where('status', 'tersedia')
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
@@ -84,11 +92,100 @@ class DashboardController extends Controller
     // 3. Detail Informasi Buku untuk Anggota
     public function detailBuku(Buku $buku)
     {
-        $buku->load('kategori');
-        return view('anggota.detail_buku', compact('buku'));
+        $buku->load(['kategori', 'rak']);
+        $anggotaId = auth('anggota')->id();
+
+        $reservasiAktif = ReservasiBuku::where('anggota_id', $anggotaId)
+            ->where('buku_id', $buku->id)
+            ->whereIn('status', ['menunggu', 'tersedia'])
+            ->first();
+
+        $totalAntreanBuku = ReservasiBuku::where('buku_id', $buku->id)
+            ->where('status', 'menunggu')
+            ->count();
+
+        return view('anggota.detail_buku', compact('buku', 'reservasiAktif', 'totalAntreanBuku'));
     }
 
-    // 4. Riwayat Semua Transaksi Peminjaman Anggota
+    // 4. Ajukan Reservasi Buku (Saat Stok 0)
+    public function ajukanReservasi(Buku $buku)
+    {
+        $anggota = auth('anggota')->user();
+
+        // Validasi keaktifan anggota
+        if ($anggota->status_keanggotaan !== 'aktif') {
+            return back()->with('error', 'Status keanggotaan Anda tidak aktif. Tidak dapat mengajukan reservasi buku.');
+        }
+
+        // Cek apakah anggota punya tanggungan pinjaman terlambat
+        $adaTerlambat = Peminjaman::where('anggota_id', $anggota->id)
+            ->where('status', 'terlambat')
+            ->exists();
+        if ($adaTerlambat) {
+            return back()->with('error', 'Anda masih memiliki pinjaman buku yang terlambat. Harap selesaikan pengembalian dan denda di perpustakaan terlebih dahulu.');
+        }
+
+        // Cek apakah sudah pernah booking buku yang sama dan masih aktif
+        $sudahBooking = ReservasiBuku::where('anggota_id', $anggota->id)
+            ->where('buku_id', $buku->id)
+            ->whereIn('status', ['menunggu', 'tersedia'])
+            ->exists();
+        if ($sudahBooking) {
+            return back()->with('error', 'Anda sudah memiliki antrean reservasi aktif untuk buku ini.');
+        }
+
+        // Generate Kode Reservasi: RSV-YYYYMMDD-0001
+        $today = Carbon::today()->format('Ymd');
+        $countToday = ReservasiBuku::whereDate('tanggal_reservasi', Carbon::today())->count() + 1;
+        $kodeReservasi = 'RSV-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
+
+        $reservasi = ReservasiBuku::create([
+            'kode_reservasi'    => $kodeReservasi,
+            'anggota_id'        => $anggota->id,
+            'buku_id'           => $buku->id,
+            'tanggal_reservasi' => now(),
+            'status'            => 'menunggu',
+            'catatan'           => 'Diajukan mandiri oleh siswa via portal online',
+        ]);
+
+        $posisi = $reservasi->posisi_antrean;
+
+        return back()->with('success', "Berhasil masuk antrean reservasi untuk buku '{$buku->judul}'! Kode: {$kodeReservasi}. Posisi antrean Anda saat ini: Antrean Ke-{$posisi}.");
+    }
+
+    // 5. Batalkan Reservasi
+    public function batalkanReservasi(ReservasiBuku $reservasi)
+    {
+        if ($reservasi->anggota_id !== auth('anggota')->id()) {
+            abort(403, 'Akses tidak sah.');
+        }
+
+        if (!in_array($reservasi->status, ['menunggu', 'tersedia'])) {
+            return back()->with('error', 'Reservasi ini sudah tidak dapat dibatalkan.');
+        }
+
+        $reservasi->update([
+            'status' => 'dibatalkan',
+            'catatan' => $reservasi->catatan . "\n[Dibatalkan mandiri oleh siswa pada " . now()->format('d/m/Y H:i') . "]",
+        ]);
+
+        return back()->with('success', 'Reservasi buku berhasil dibatalkan.');
+    }
+
+    // 6. Riwayat Reservasi Saya
+    public function reservasiSaya()
+    {
+        $anggotaId = auth('anggota')->id();
+
+        $reservasi = ReservasiBuku::with(['buku.kategori', 'buku.rak'])
+            ->where('anggota_id', $anggotaId)
+            ->latest('id')
+            ->get();
+
+        return view('anggota.reservasi_saya', compact('reservasi'));
+    }
+
+    // 7. Riwayat Semua Transaksi Peminjaman Anggota
     public function pinjamanSaya()
     {
         $anggotaId = auth('anggota')->id();

@@ -11,6 +11,8 @@ use App\Http\Controllers\Petugas\RakBukuController;
 use App\Http\Controllers\Petugas\BukuController;
 use App\Http\Controllers\Petugas\PeminjamanController;
 use App\Http\Controllers\Petugas\PengembalianController;
+use App\Http\Controllers\Petugas\ReservasiController;
+use App\Http\Controllers\Petugas\StafController;
 use App\Http\Controllers\Petugas\LaporanController;
 use App\Http\Controllers\Petugas\PengaturanController;
 
@@ -25,7 +27,7 @@ Route::get('/', function () {
     return redirect()->route('petugas.login');
 });
 
-// Login Petugas
+// Portal Petugas & Admin Perpustakaan
 Route::prefix('petugas')->name('petugas.')->group(function () {
     Route::middleware('guest:petugas')->group(function () {
         Route::get('/login', [PetugasAuthController::class, 'showLogin'])
@@ -39,6 +41,7 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
         Route::get('/dashboard', [PetugasDashboardController::class, 'index'])
             ->name('dashboard');
 
+        // Master Data Katalog
         Route::resource('kategori', KategoriBukuController::class);
         Route::resource('rak', RakBukuController::class);
         
@@ -53,6 +56,18 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
             ->name('buku.cetak-barcode');
         Route::resource('buku', BukuController::class);
 
+        // Data Anggota & Cetak Kartu
+        Route::get('/anggota/export-csv', [AnggotaController::class, 'exportCsv'])
+            ->name('anggota.export-csv');
+        Route::get('/anggota/download-template', [AnggotaController::class, 'downloadTemplateCsv'])
+            ->name('anggota.download-template');
+        Route::post('/anggota/import-csv', [AnggotaController::class, 'importCsv'])
+            ->name('anggota.import-csv');
+        Route::get('/anggota/{anggota}/cetak-kartu', [AnggotaController::class, 'cetakKartu'])
+            ->name('anggota.cetak-kartu');
+        Route::resource('anggota', AnggotaController::class);
+
+        // Sirkulasi Peminjaman
         Route::get('/peminjaman/cari-buku', [PeminjamanController::class, 'cariBuku'])
             ->name('peminjaman.cari-buku');
         Route::get('/peminjaman/cari-anggota', [PeminjamanController::class, 'cariAnggota'])
@@ -63,36 +78,55 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
             ->name('peminjaman.perpanjang');
         Route::resource('peminjaman', PeminjamanController::class);
         
-        // Transaksi Pengembalian: Dibatasi HANYA index, create, store, show.
-        // TIDAK ADA edit, update, atau destroy untuk menjamin Integritas Data & Anti-Manipulasi (Immutable Ledger)
+        // Sirkulasi Pengembalian (Immutable Ledger - Anti-Manipulasi)
         Route::get('/pengembalian/cari-pinjaman', [PengembalianController::class, 'cariPinjaman'])
             ->name('pengembalian.cari-pinjaman');
         Route::resource('pengembalian', PengembalianController::class)->only(['index', 'create', 'store', 'show']);
 
-        // Modul Laporan & Rekapitulasi Perpustakaan
+        // Sirkulasi Reservasi & Antrean Buku
+        Route::get('/reservasi', [ReservasiController::class, 'index'])
+            ->name('reservasi.index');
+        Route::post('/reservasi/{reservasi}/ambil', [ReservasiController::class, 'prosesAmbil'])
+            ->name('reservasi.ambil');
+        Route::post('/reservasi/{reservasi}/batal', [ReservasiController::class, 'batalkan'])
+            ->name('reservasi.batal');
+        Route::post('/reservasi/cek-kedaluwarsa', [ReservasiController::class, 'cekKedaluwarsa'])
+            ->name('reservasi.cek-kedaluwarsa');
+
+        // Laporan Sirkulasi Operasional
         Route::get('/laporan', [LaporanController::class, 'index'])
             ->name('laporan.index');
         Route::get('/laporan/cetak', [LaporanController::class, 'cetak'])
             ->name('laporan.cetak');
-        Route::get('/laporan/cetak-keuangan', [LaporanController::class, 'cetakKeuangan'])
-            ->name('laporan.cetak-keuangan');
         Route::get('/laporan/cetak-sirkulasi', [LaporanController::class, 'cetakSirkulasi'])
             ->name('laporan.cetak-sirkulasi');
-        Route::get('/laporan/export-keuangan', [LaporanController::class, 'exportKeuanganExcel'])
-            ->name('laporan.export-keuangan');
 
-        // Modul Pengaturan Perpustakaan
-        Route::get('/pengaturan', [PengaturanController::class, 'index'])
-            ->name('pengaturan.index');
-        Route::put('/pengaturan', [PengaturanController::class, 'update'])
-            ->name('pengaturan.update');
+        // ==========================================
+        // KHUSUS HAK AKSES ADMIN / KEPALA PERPUS
+        // ==========================================
+        Route::middleware('petugas.admin')->group(function () {
+            // Manajemen Petugas & Hak Akses
+            Route::resource('staf', StafController::class);
+
+            // Pengaturan Perpustakaan (Denda, Kuota, Durasi Pinjam)
+            Route::get('/pengaturan', [PengaturanController::class, 'index'])
+                ->name('pengaturan.index');
+            Route::put('/pengaturan', [PengaturanController::class, 'update'])
+                ->name('pengaturan.update');
+
+            // Laporan Keuangan Eksekutif (LPJ Kas & Excel)
+            Route::get('/laporan/cetak-keuangan', [LaporanController::class, 'cetakKeuangan'])
+                ->name('laporan.cetak-keuangan');
+            Route::get('/laporan/export-keuangan', [LaporanController::class, 'exportKeuanganExcel'])
+                ->name('laporan.export-keuangan');
+        });
 
         Route::post('/logout', [PetugasAuthController::class, 'logout'])
             ->name('logout');
     });
 });
 
-// Login Anggota
+// Portal Anggota (Siswa)
 Route::prefix('anggota')->name('anggota.')->group(function () {
     Route::middleware('guest:anggota')->group(function () {
         Route::get('/login', [AnggotaAuthController::class, 'showLogin'])
@@ -112,6 +146,14 @@ Route::prefix('anggota')->name('anggota.')->group(function () {
         Route::get('/katalog/{buku}', [AnggotaDashboardController::class, 'detailBuku'])
             ->name('katalog.detail');
 
+        // Reservasi & Antrean Buku Mandiri
+        Route::post('/reservasi/{buku}', [AnggotaDashboardController::class, 'ajukanReservasi'])
+            ->name('reservasi.store');
+        Route::post('/reservasi/{reservasi}/batal', [AnggotaDashboardController::class, 'batalkanReservasi'])
+            ->name('reservasi.batal');
+        Route::get('/reservasi-saya', [AnggotaDashboardController::class, 'reservasiSaya'])
+            ->name('reservasi-saya');
+
         Route::get('/pinjaman-saya', [AnggotaDashboardController::class, 'pinjamanSaya'])
             ->name('pinjaman-saya');
 
@@ -122,41 +164,3 @@ Route::prefix('anggota')->name('anggota.')->group(function () {
             ->name('logout');
     });
 });
-
-
-Route::middleware(['auth:petugas', 'petugas.aktif'])
-    ->prefix('petugas')
-    ->name('petugas.')
-    ->group(function () {
-        Route::get('/anggota', [AnggotaController::class, 'index'])
-            ->name('anggota.index');
-
-        Route::get('/anggota/create', [AnggotaController::class, 'create'])
-            ->name('anggota.create');
-
-        Route::post('/anggota', [AnggotaController::class, 'store'])
-            ->name('anggota.store');
-
-        // Export & Import Massal Data Anggota
-        Route::get('/anggota/export-csv', [AnggotaController::class, 'exportCsv'])
-            ->name('anggota.export-csv');
-        Route::get('/anggota/download-template', [AnggotaController::class, 'downloadTemplateCsv'])
-            ->name('anggota.download-template');
-        Route::post('/anggota/import-csv', [AnggotaController::class, 'importCsv'])
-            ->name('anggota.import-csv');
-
-        Route::get('/anggota/{anggota}', [AnggotaController::class, 'show'])
-            ->name('anggota.show');
-
-        Route::get('/anggota/{anggota}/cetak-kartu', [AnggotaController::class, 'cetakKartu'])
-            ->name('anggota.cetak-kartu');
-
-        Route::get('/anggota/{anggota}/edit', [AnggotaController::class, 'edit'])
-            ->name('anggota.edit');
-
-        Route::put('/anggota/{anggota}', [AnggotaController::class, 'update'])
-            ->name('anggota.update');
-
-        Route::delete('/anggota/{anggota}', [AnggotaController::class, 'destroy'])
-            ->name('anggota.destroy');
-    });

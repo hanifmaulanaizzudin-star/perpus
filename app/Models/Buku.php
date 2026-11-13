@@ -54,4 +54,9 @@ class Buku extends Model
     {
         return $this->hasMany(DetailPeminjaman::class, 'buku_id');
     }
+
+    public function reservasi(): HasMany
+    {
+        return $this->hasMany(ReservasiBuku::class, 'buku_id');
+    }
 }

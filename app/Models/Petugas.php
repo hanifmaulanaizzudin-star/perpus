@@ -18,6 +18,7 @@ class Petugas extends Authenticatable
     protected $fillable = [
         'nomor_pegawai',
         'nama_lengkap',
+        'role',
         'nama_pengguna',
         'email',
         'kata_sandi',
@@ -26,6 +27,16 @@ class Petugas extends Authenticatable
         'status',
         'terakhir_login',
     ];
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function getLabelRoleAttribute(): string
+    {
+        return $this->role === 'admin' ? 'Kepala Perpus / Admin' : 'Petugas Sirkulasi';
+    }
 
     protected $hidden = [
         'kata_sandi',

@@ -339,6 +339,9 @@
                 <a href="{{ route('anggota.pinjaman-saya') }}" class="nav-link {{ request()->routeIs('anggota.pinjaman-saya') ? 'active' : '' }}">
                     Pinjaman Saya
                 </a>
+                <a href="{{ route('anggota.reservasi-saya') }}" class="nav-link {{ request()->routeIs('anggota.reservasi-saya*') ? 'active' : '' }}">
+                    Reservasi Saya
+                </a>
                 <a href="{{ route('anggota.kartu-saya') }}" class="nav-link {{ request()->routeIs('anggota.kartu-saya') ? 'active' : '' }}">
                     Kartu Anggota
                 </a>

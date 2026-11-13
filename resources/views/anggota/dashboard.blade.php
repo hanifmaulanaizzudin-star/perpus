@@ -91,6 +91,20 @@
             </div>
         </div>
 
+        {{-- Stat 4 - Reservasi & Antrean --}}
+        <a href="{{ route('anggota.reservasi-saya') }}" class="card-box" style="margin-bottom: 0; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; text-decoration: none; transition: transform 0.2s ease, box-shadow 0.2s ease;" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 10px 25px -4px rgba(15,23,42,0.08)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 20px -2px rgba(15,23,42,0.04)'">
+            <div>
+                <span style="font-size: 12.5px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Antrean Booking</span>
+                <div style="font-size: 30px; font-weight: 800; color: #7c3aed; margin: 4px 0 2px;">{{ $reservasiAktif }}</div>
+                <span style="font-size: 12px; color: #7c3aed; font-weight: 600;">Lihat antrean &rarr;</span>
+            </div>
+            <div style="width: 52px; height: 52px; border-radius: 14px; background: #f5f3ff; color: #7c3aed; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(124, 58, 237, 0.15);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+            </div>
+        </a>
+
     </div>
 
     {{-- Active Loans Card --}}

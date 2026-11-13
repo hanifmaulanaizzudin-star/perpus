@@ -56,4 +56,9 @@ class Anggota extends Authenticatable
     {
         return $this->hasMany(Peminjaman::class, 'anggota_id');
     }
+
+    public function reservasi(): HasMany
+    {
+        return $this->hasMany(ReservasiBuku::class, 'anggota_id');
+    }
 }

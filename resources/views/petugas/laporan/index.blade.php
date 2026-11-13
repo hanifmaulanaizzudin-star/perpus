@@ -16,7 +16,8 @@
             </p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            {{-- Export Excel --}}
+            @if(auth('petugas')->user()->isAdmin())
+            {{-- Export Excel (Khusus Admin / Kepala Perpus) --}}
             <a href="{{ route('petugas.laporan.export-keuangan', ['tanggal_mulai' => $tanggalMulai, 'tanggal_selesai' => $tanggalSelesai]) }}" 
                class="btn"
                style="background: #15803d; color: #ffffff; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; padding: 9px 16px; border-radius: 8px; text-decoration: none; box-shadow: 0 2px 8px rgba(21, 128, 61, 0.25);">
@@ -28,7 +29,7 @@
                 Export Excel (.xls)
             </a>
 
-            {{-- Cetak LPJ Keuangan (Khusus Atasan) --}}
+            {{-- Cetak LPJ Keuangan (Khusus Admin / Kepala Perpus) --}}
             <a href="{{ route('petugas.laporan.cetak-keuangan', ['tanggal_mulai' => $tanggalMulai, 'tanggal_selesai' => $tanggalSelesai]) }}" 
                target="_blank" 
                class="btn"
@@ -39,6 +40,7 @@
                 </svg>
                 Cetak LPJ Keuangan (Atasan)
             </a>
+            @endif
 
             {{-- Cetak Sirkulasi (Khusus Atasan) --}}
             <a href="{{ route('petugas.laporan.cetak-sirkulasi', ['tanggal_mulai' => $tanggalMulai, 'tanggal_selesai' => $tanggalSelesai]) }}" 

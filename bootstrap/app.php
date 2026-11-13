@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
     $middleware->alias([
         'petugas.aktif' => \App\Http\Middleware\EnsurePetugasAktif::class,
+        'petugas.admin' => \App\Http\Middleware\EnsurePetugasAdmin::class,
         'anggota.aktif' => \App\Http\Middleware\EnsureAnggotaAktif::class,
     ]);
 
