@@ -345,10 +345,13 @@
                 <a href="{{ route('anggota.kartu-saya') }}" class="nav-link {{ request()->routeIs('anggota.kartu-saya') ? 'active' : '' }}">
                     Kartu Anggota
                 </a>
+                <a href="{{ route('anggota.pengaturan') }}" class="nav-link {{ request()->routeIs('anggota.pengaturan*') ? 'active' : '' }}">
+                    Pengaturan
+                </a>
             </nav>
 
             <div class="user-menu">
-                <div class="user-profile">
+                <a href="{{ route('anggota.pengaturan') }}" class="user-profile" style="text-decoration: none; color: inherit; cursor: pointer;" title="Klik untuk membuka Pengaturan Profil">
                     <div class="user-avatar-circle">
                         {{ strtoupper(substr(auth('anggota')->user()->nama_lengkap ?? 'A', 0, 1)) }}
                     </div>
@@ -356,7 +359,7 @@
                         <div class="user-meta-name">{{ auth('anggota')->user()->nama_lengkap ?? 'Anggota' }}</div>
                         <div class="user-meta-nis">NIS: {{ auth('anggota')->user()->nomor_induk ?? '-' }}</div>
                     </div>
-                </div>
+                </a>
 
                 <form action="{{ route('anggota.logout') }}" method="POST" style="margin: 0;">
                     @csrf

@@ -160,6 +160,14 @@ Route::prefix('anggota')->name('anggota.')->group(function () {
         Route::get('/kartu-saya', [AnggotaDashboardController::class, 'kartuSaya'])
             ->name('kartu-saya');
 
+        // Pengaturan Akun & Profil Siswa
+        Route::get('/pengaturan', [AnggotaDashboardController::class, 'pengaturan'])
+            ->name('pengaturan');
+        Route::put('/pengaturan/profil', [AnggotaDashboardController::class, 'updateProfil'])
+            ->name('pengaturan.profil');
+        Route::put('/pengaturan/password', [AnggotaDashboardController::class, 'updatePassword'])
+            ->name('pengaturan.password');
+
         Route::post('/logout', [AnggotaAuthController::class, 'logout'])
             ->name('logout');
     });

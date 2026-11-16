@@ -10,6 +10,8 @@ use App\Models\Peminjaman;
 use App\Models\ReservasiBuku;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
 {
@@ -206,5 +208,56 @@ class DashboardController extends Controller
     {
         $anggota = auth('anggota')->user();
         return view('anggota.kartu_saya', compact('anggota'));
+    }
+
+    // 6. Halaman Pengaturan & Profil Akun Siswa
+    public function pengaturan()
+    {
+        $anggota = auth('anggota')->user();
+        return view('anggota.pengaturan', compact('anggota'));
+    }
+
+    // 7. Update Informasi Kontak Siswa (No WA, Email, Alamat)
+    public function updateProfil(Request $request)
+    {
+        $anggota = auth('anggota')->user();
+
+        $validated = $request->validate([
+            'no_telepon' => 'nullable|string|max:20',
+            'email'      => ['nullable', 'email', 'max:100', Rule::unique('anggota', 'email')->ignore($anggota->id)],
+            'alamat'     => 'nullable|string|max:500',
+        ], [
+            'email.unique' => 'Alamat email sudah digunakan oleh akun lain.',
+        ]);
+
+        $anggota->update($validated);
+
+        return back()->with('success_profil', 'Informasi profil dan kontak WhatsApp berhasil diperbarui!');
+    }
+
+    // 8. Update Kata Sandi / Password Siswa
+    public function updatePassword(Request $request)
+    {
+        $anggota = auth('anggota')->user();
+
+        $request->validate([
+            'kata_sandi_lama' => 'required',
+            'kata_sandi'      => 'required|string|min:6|confirmed',
+        ], [
+            'kata_sandi_lama.required' => 'Kata sandi saat ini wajib diisi.',
+            'kata_sandi.required'      => 'Kata sandi baru wajib diisi.',
+            'kata_sandi.min'           => 'Kata sandi baru minimal 6 karakter.',
+            'kata_sandi.confirmed'     => 'Konfirmasi kata sandi baru tidak cocok.',
+        ]);
+
+        if (!Hash::check($request->kata_sandi_lama, $anggota->kata_sandi)) {
+            return back()->withErrors(['kata_sandi_lama' => 'Kata sandi saat ini yang Anda masukkan salah.']);
+        }
+
+        $anggota->update([
+            'kata_sandi' => Hash::make($request->kata_sandi),
+        ]);
+
+        return back()->with('success_password', 'Kata sandi berhasil diubah! Gunakan kata sandi baru saat login berikutnya.');
     }
 }
