@@ -21,12 +21,12 @@
     </div>
 
     {{-- Quick Category Filter Chips --}}
-    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 14px; margin-bottom: 18px;">
-        <a href="{{ route('anggota.katalog') }}" style="text-decoration: none; padding: 7px 16px; border-radius: 9999px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.15s ease; {{ !request('kategori_id') ? 'background: #4f46e5; color: #ffffff; box-shadow: 0 2px 8px rgba(79,70,229,0.3);' : 'background: #f1f5f9; color: #475569;' }}">
+    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 18px;">
+        <a href="{{ route('anggota.katalog') }}" style="text-decoration: none; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.15s ease; {{ !request('kategori_id') ? 'background: #2563eb; color: #ffffff;' : 'background: #f1f5f9; color: #475569;' }}">
             Semua Kategori
         </a>
         @foreach ($kategoriList as $kat)
-            <a href="{{ route('anggota.katalog', array_merge(request()->query(), ['kategori_id' => $kat->id])) }}" style="text-decoration: none; padding: 7px 16px; border-radius: 9999px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.15s ease; {{ request('kategori_id') == $kat->id ? 'background: #4f46e5; color: #ffffff; box-shadow: 0 2px 8px rgba(79,70,229,0.3);' : 'background: #f1f5f9; color: #475569;' }}">
+            <a href="{{ route('anggota.katalog', array_merge(request()->query(), ['kategori_id' => $kat->id])) }}" style="text-decoration: none; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: all 0.15s ease; {{ request('kategori_id') == $kat->id ? 'background: #2563eb; color: #ffffff;' : 'background: #f1f5f9; color: #475569;' }}">
                 {{ $kat->nama_kategori }}
             </a>
         @endforeach

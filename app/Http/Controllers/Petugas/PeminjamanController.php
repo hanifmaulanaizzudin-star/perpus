@@ -304,41 +304,61 @@ class PeminjamanController extends Controller
         return back()->with('success', "⚡ Pengiriman WA Otomatis Berhasil! Pesan tagihan telah dikirimkan ke {$terkirim} murid yang terlambat{$infoTambahan}.");
     }
 
-    // 7. Perpanjang Masa Peminjaman Buku (Loan Renewal)
-    public function perpanjang(Peminjaman $peminjaman)
+    // 7. Perpanjang Masa Peminjaman Buku (Loan Renewal - Fleksibel)
+    public function perpanjang(Request $request, Peminjaman $peminjaman)
     {
         // 1. Validasi Status Pinjaman
         if ($peminjaman->status === 'dikembalikan') {
-            return back()->with('error', 'Transaksi peminjaman ini sudah selesai dikembalikan.');
+            return back()->with('error', 'Transaksi peminjaman ini sudah selesai dikembalikan dan tidak dapat diperpanjang.');
         }
 
-        if ($peminjaman->status === 'terlambat' || Carbon::today()->startOfDay()->greaterThan(Carbon::parse($peminjaman->tanggal_jatuh_tempo)->startOfDay())) {
-            return back()->with('error', 'Peminjaman sudah melewati jatuh tempo (terlambat) dan terkena denda. Harap selesaikan pengembalian di meja sirkulasi.');
+        // 2. Batas Maksimal Perpanjangan (Fleksibel, izinkan hingga 3 kali)
+        $maxPerpanjangan = 3;
+        if (($peminjaman->jumlah_perpanjangan ?? 0) >= $maxPerpanjangan) {
+            return back()->with('error', "Peminjaman {$peminjaman->kode_peminjaman} sudah mencapai batas maksimal perpanjangan ({$maxPerpanjangan} kali). Harap lakukan pengembalian buku terlebih dahulu.");
         }
 
-        // 2. Batas Maksimal Perpanjangan (Maksimal 1 kali)
-        if (($peminjaman->jumlah_perpanjangan ?? 0) >= 1) {
-            return back()->with('error', "Peminjaman {$peminjaman->kode_peminjaman} sudah mencapai batas maksimal perpanjangan (1 kali).");
+        // 3. Tentukan Tanggal Jatuh Tempo Baru secara Fleksibel
+        $tenggatLama = Carbon::parse($peminjaman->tanggal_jatuh_tempo)->startOfDay();
+        $hariIni = Carbon::today()->startOfDay();
+
+        if ($request->filled('tanggal_jatuh_tempo_baru')) {
+            $tenggatBaru = Carbon::parse($request->tanggal_jatuh_tempo_baru)->startOfDay();
+            if ($tenggatBaru->lessThanOrEqualTo($hariIni)) {
+                return back()->with('error', 'Tanggal jatuh tempo baru harus lebih besar dari hari ini.');
+            }
+            if ($tenggatBaru->lessThanOrEqualTo($tenggatLama)) {
+                return back()->with('error', 'Tanggal jatuh tempo baru harus lebih lama dari tanggal jatuh tempo saat ini (' . $tenggatLama->format('d/m/Y') . ').');
+            }
+            $durasiHari = $tenggatLama->diffInDays($tenggatBaru);
+        } elseif ($request->filled('durasi_hari')) {
+            $durasiHari = max(1, (int) $request->durasi_hari);
+            $baseDate = $tenggatLama->greaterThan($hariIni) ? $tenggatLama : $hariIni;
+            $tenggatBaru = $baseDate->copy()->addDays($durasiHari);
+        } else {
+            $pengaturan = PengaturanPerpustakaan::first();
+            $durasiHari = $pengaturan->lama_peminjaman_hari ?? 7;
+            $baseDate = $tenggatLama->greaterThan($hariIni) ? $tenggatLama : $hariIni;
+            $tenggatBaru = $baseDate->copy()->addDays($durasiHari);
         }
 
-        // 3. Hitung Tanggal Jatuh Tempo Baru
-        $pengaturan = PengaturanPerpustakaan::first();
-        $durasiHari = $pengaturan->lama_peminjaman_hari ?? 7;
-        $tenggatLama = Carbon::parse($peminjaman->tanggal_jatuh_tempo)->translatedFormat('d M Y');
-        $tenggatBaru = Carbon::parse($peminjaman->tanggal_jatuh_tempo)->addDays($durasiHari);
-
-        // 4. Update Database
+        $ke = ($peminjaman->jumlah_perpanjangan ?? 0) + 1;
         $petugasNama = auth('petugas')->user()->nama_lengkap ?? 'Petugas';
-        $logPerpanjangan = "[Perpanjangan Ke-1: Ditambah {$durasiHari} hari dari {$tenggatLama} menjadi {$tenggatBaru->format('d/m/Y')} oleh {$petugasNama} pada " . now()->format('d/m/Y H:i') . "]";
+        $tenggatLamaFormat = $tenggatLama->format('d/m/Y');
+        $tenggatBaruFormat = $tenggatBaru->format('d/m/Y');
+        $alasanText = !empty($request->alasan) ? " - Alasan: " . trim($request->alasan) : "";
+        $logPerpanjangan = "[Perpanjangan Ke-{$ke}: Ditambah {$durasiHari} hari dari {$tenggatLamaFormat} menjadi {$tenggatBaruFormat} oleh {$petugasNama} pada " . now()->format('d/m/Y H:i') . $alasanText . "]";
         $catatanBaru = !empty($peminjaman->catatan) ? ($peminjaman->catatan . "\n" . $logPerpanjangan) : $logPerpanjangan;
 
+        // 4. Update Database
         $peminjaman->update([
             'tanggal_jatuh_tempo' => $tenggatBaru->format('Y-m-d'),
-            'jumlah_perpanjangan' => ($peminjaman->jumlah_perpanjangan ?? 0) + 1,
+            'status'              => 'dipinjam', // Pulihkan status jika sebelumnya terlambat
+            'jumlah_perpanjangan' => $ke,
             'catatan'             => $catatanBaru,
         ]);
 
-        // 5. Notifikasi WhatsApp Konfirmasi Perpanjangan (Opsional/Otomatis)
+        // 5. Notifikasi WhatsApp Konfirmasi Perpanjangan Otomatis
         $anggota = $peminjaman->anggota;
         if ($anggota && !empty($anggota->no_telepon)) {
             $bukuList = $peminjaman->detailPeminjaman->map(fn($d) => $d->buku->judul ?? 'Buku')->implode(', ');
@@ -346,14 +366,15 @@ class PeminjamanController extends Controller
                      . "✅ *Pemberitahuan Perpanjangan Pinjaman Buku*\n"
                      . "Kode Pinjam: *{$peminjaman->kode_peminjaman}*\n"
                      . "Buku: *{$bukuList}*\n"
-                     . "📅 *Tenggat Waktu Baru: {$tenggatBaru->translatedFormat('d F Y')}*\n\n"
-                     . "Masa peminjaman buku kamu telah berhasil diperpanjang (+{$durasiHari} hari). Selamat membaca kembali! 📖\n\n"
+                     . "📅 *Tenggat Waktu Baru: {$tenggatBaru->translatedFormat('l, d F Y')}*\n"
+                     . "Durasi Tambahan: *+{$durasiHari} Hari*\n\n"
+                     . "Masa peminjaman buku kamu telah berhasil diperpanjang. Selamat membaca kembali! 📖\n\n"
                      . "_Perpustakaan PerpusKu_";
 
             \App\Services\WhatsAppService::kirimPesan($anggota->no_telepon, $pesanWa);
         }
 
-        return back()->with('success', "Perpanjangan berhasil! Peminjaman {$peminjaman->kode_peminjaman} diperpanjang {$durasiHari} hari hingga {$tenggatBaru->translatedFormat('d F Y')}.");
+        return back()->with('success', "Perpanjangan berhasil! Peminjaman {$peminjaman->kode_peminjaman} diperpanjang +{$durasiHari} hari hingga {$tenggatBaru->translatedFormat('l, d F Y')}.");
     }
 }
 

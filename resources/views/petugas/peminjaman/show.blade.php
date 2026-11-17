@@ -165,19 +165,15 @@
             <a href="{{ route('petugas.pengembalian.create', ['peminjaman_id' => $peminjaman->id]) }}" class="btn btn-primary">
                 Proses Pengembalian Buku
             </a>
-            @if ($peminjaman->status === 'dipinjam')
-                @if (($peminjaman->jumlah_perpanjangan ?? 0) < 1)
-                    <form action="{{ route('petugas.peminjaman.perpanjang', $peminjaman->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Apakah Anda yakin ingin memperpanjang masa peminjaman {{ $peminjaman->kode_peminjaman }} selama 7 hari?');">
-                        @csrf
-                        <button type="submit" class="btn" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; font-weight: 600;">
-                            🔄 Perpanjang Masa Pinjam (+7 Hari)
-                        </button>
-                    </form>
-                @else
-                    <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 12px; padding: 8px 12px; border: 1px solid #e2e8f0;">
-                        ℹ️ Sudah Diperpanjang 1 Kali (Maksimal)
-                    </span>
-                @endif
+            
+            @if (($peminjaman->jumlah_perpanjangan ?? 0) < 3)
+                <button type="button" class="btn" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; font-weight: 600;" onclick="bukaModalPerpanjang()">
+                    🔄 Perpanjang Masa Pinjam (Fleksibel)
+                </button>
+            @else
+                <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 12px; padding: 8px 12px; border: 1px solid #e2e8f0;">
+                    ℹ️ Sudah Diperpanjang {{ $peminjaman->jumlah_perpanjangan }}x (Maksimal)
+                </span>
             @endif
         @endif
         <a href="{{ route('petugas.peminjaman.index') }}" class="btn btn-secondary">
@@ -186,4 +182,199 @@
     </div>
 
 </div>
+
+{{-- Modal Perpanjangan Pinjaman Fleksibel --}}
+@if (in_array($peminjaman->status, ['dipinjam', 'terlambat']))
+<style>
+    .btn-preset {
+        background: #f8fafc;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        font-family: inherit;
+    }
+    .btn-preset:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+    .btn-preset.active {
+        background: #4f46e5;
+        color: #ffffff;
+        border-color: #4f46e5;
+    }
+</style>
+
+<div id="modalPerpanjang" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); z-index: 9999; justify-content: center; align-items: center; padding: 20px;">
+    <div style="background: #ffffff; border-radius: 14px; max-width: 520px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); overflow: hidden;">
+        
+        {{-- Modal Header --}}
+        <div style="padding: 18px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 2px;">
+                    Perpanjang Masa Pinjam Fleksibel
+                </h3>
+                <p style="font-size: 12.5px; color: #64748b; margin: 0;">
+                    Kode: <strong>{{ $peminjaman->kode_peminjaman }}</strong> &bull; Siswa: {{ $peminjaman->anggota->nama_lengkap ?? '-' }}
+                </p>
+            </div>
+            <button type="button" onclick="tutupModalPerpanjang()" style="background: transparent; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; line-height: 1;" title="Tutup">&times;</button>
+        </div>
+
+        <form action="{{ route('petugas.peminjaman.perpanjang', $peminjaman->id) }}" method="POST" style="padding: 22px 24px;">
+            @csrf
+
+            {{-- Current Due Date Card --}}
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase;">Tenggat Waktu Saat Ini</span>
+                    <div style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">
+                        {{ \Carbon\Carbon::parse($peminjaman->tanggal_jatuh_tempo)->translatedFormat('l, d F Y') }}
+                    </div>
+                </div>
+                <div>
+                    <span class="badge" style="background: #eef2ff; color: #4338ca; font-size: 11px;">
+                        Perpanjangan ke-{{ ($peminjaman->jumlah_perpanjangan ?? 0) + 1 }}
+                    </span>
+                </div>
+            </div>
+
+            {{-- Quick Presets --}}
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12.5px; font-weight: 600; color: #334155; margin-bottom: 8px;">
+                    Pilihan Cepat Tambahan Durasi:
+                </label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn-preset" onclick="setPresetHari(3)">+3 Hari</button>
+                    <button type="button" class="btn-preset active" onclick="setPresetHari(7)">+7 Hari (Standar)</button>
+                    <button type="button" class="btn-preset" onclick="setPresetHari(14)">+14 Hari (2 Minggu)</button>
+                    <button type="button" class="btn-preset" onclick="setPresetHari(30)">+30 Hari (1 Bulan)</button>
+                </div>
+            </div>
+
+            {{-- Custom Duration & Date Inputs --}}
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 6px;">
+                        Jumlah Hari Tambahan
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <input type="number" id="inputDurasiHari" name="durasi_hari" value="7" min="1" max="90" style="width: 100%; height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 13.5px;" oninput="onDurasiChanged()">
+                        <span style="font-size: 13px; color: #64748b; white-space: nowrap;">Hari</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 6px;">
+                        Atau Pilih Tanggal Baru
+                    </label>
+                    @php
+                        $tenggatAsal = \Carbon\Carbon::parse($peminjaman->tanggal_jatuh_tempo);
+                        $minDate = ($tenggatAsal->isPast() ? \Carbon\Carbon::tomorrow() : $tenggatAsal->copy()->addDay())->format('Y-m-d');
+                        $defaultDate = $tenggatAsal->copy()->addDays(7)->format('Y-m-d');
+                    @endphp
+                    <input type="date" id="inputTanggalBaru" name="tanggal_jatuh_tempo_baru" value="{{ $defaultDate }}" min="{{ $minDate }}" style="width: 100%; height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 13.5px;" onchange="onDateChanged()">
+                </div>
+            </div>
+
+            {{-- Dynamic Preview Box --}}
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
+                <div style="font-size: 11px; font-weight: 700; color: #15803d; text-transform: uppercase;">Pratinjau Jatuh Tempo Baru</div>
+                <div id="previewTenggatBaru" style="font-size: 14px; font-weight: 800; color: #166534; margin-top: 2px;">
+                    {{ \Carbon\Carbon::parse($peminjaman->tanggal_jatuh_tempo)->addDays(7)->translatedFormat('l, d F Y') }} (+7 hari)
+                </div>
+            </div>
+
+            {{-- Optional Note / Alasan --}}
+            <div style="margin-bottom: 22px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 6px;">
+                    Alasan / Keterangan Dispensasi <small style="color: #94a3b8; font-weight: normal;">(Opsional)</small>
+                </label>
+                <input type="text" name="alasan" placeholder="Contoh: Dispensasi tugas akhir / izin guru pembimbing" style="width: 100%; height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 13px;">
+            </div>
+
+            {{-- Footer Buttons --}}
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn" style="background: #f1f5f9; color: #475569;" onclick="tutupModalPerpanjang()">Batal</button>
+                <button type="submit" class="btn btn-primary" style="background: #4f46e5; border-color: #4f46e5; padding: 8px 20px;">
+                    Konfirmasi Perpanjang
+                </button>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<script>
+    const baseDueDateStr = "{{ $peminjaman->tanggal_jatuh_tempo }}";
+    const baseDueDate = new Date(baseDueDateStr + "T00:00:00");
+
+    function bukaModalPerpanjang() {
+        document.getElementById('modalPerpanjang').style.display = 'flex';
+    }
+
+    function tutupModalPerpanjang() {
+        document.getElementById('modalPerpanjang').style.display = 'none';
+    }
+
+    function setPresetHari(days) {
+        document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+        if (event && event.target) {
+            event.target.classList.add('active');
+        }
+
+        document.getElementById('inputDurasiHari').value = days;
+        updateDateFromDays(days);
+    }
+
+    function onDurasiChanged() {
+        let days = parseInt(document.getElementById('inputDurasiHari').value) || 1;
+        document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+        updateDateFromDays(days);
+    }
+
+    function updateDateFromDays(days) {
+        const newDate = new Date(baseDueDate);
+        newDate.setDate(newDate.getDate() + days);
+
+        const yyyy = newDate.getFullYear();
+        const mm = String(newDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(newDate.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+
+        document.getElementById('inputTanggalBaru').value = dateStr;
+        updatePreviewText(newDate, days);
+    }
+
+    function onDateChanged() {
+        const dateVal = document.getElementById('inputTanggalBaru').value;
+        if (!dateVal) return;
+
+        const selectedDate = new Date(dateVal + "T00:00:00");
+        const diffTime = selectedDate - baseDueDate;
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+        document.getElementById('inputDurasiHari').value = diffDays;
+        document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+        updatePreviewText(selectedDate, diffDays);
+    }
+
+    function updatePreviewText(dateObj, days) {
+        const daysName = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        const monthsName = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+        const dayName = daysName[dateObj.getDay()];
+        const day = dateObj.getDate();
+        const month = monthsName[dateObj.getMonth()];
+        const year = dateObj.getFullYear();
+
+        const sign = days >= 0 ? '+' : '';
+        document.getElementById('previewTenggatBaru').innerText = `${dayName}, ${day} ${month} ${year} (${sign}${days} hari)`;
+    }
+</script>
+@endif
 @endsection
